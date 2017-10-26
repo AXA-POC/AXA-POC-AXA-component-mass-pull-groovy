@@ -1,0 +1,279 @@
+def InvokeEnvVars(){
+      SOURCE_CODE = env.SOURCE_CODE;
+      SOURCE_CODE_DIR = env.DEVOPS_LOCAL_FOLDER;
+      BMS_SOURCE_CODE = env.BMS_SOURCE_CODE;
+      DATA_FILE = env.DATA_FILE;
+      DATA_FILE_DIR = env.DEVOPS_LOCAL_FOLDER;
+      RFT_FILE = env.RFT_FILE;
+      RFT_FILE_DIR = env.DEVOPS_LOCAL_FOLDER;
+      GIT_REMOTE_REPO_SC =  env.GIT_REMOTE_REPO_SC;
+      GIT_REMOTE_REPO_DF =  env.GIT_REMOTE_REPO_DF;
+      GIT_REMOTE_REPO_RFT =  env.GIT_REMOTE_REPO_RFT;
+      GIT_LOCAL_REPO_SC = (env.GIT_LOCAL_REPO_SC);
+      GIT_LOCAL_REPO_DF = (env.GIT_LOCAL_REPO_DF);
+      GIT_LOCAL_REPO_RFT = (env.GIT_LOCAL_REPO_RFT);
+      GIT_WORKING_REPO_SC = GIT_LOCAL_REPO_SC.replace("\\","\\\\");
+      GIT_WORKING_REPO_DF = GIT_LOCAL_REPO_DF.replace("\\","\\\\");
+      GIT_WORKING_REPO_RFT = GIT_LOCAL_REPO_RFT.replace("\\","\\\\");
+      DEVOPS_LOCAL_FOLDER_SC = (env.DEVOPS_LOCAL_FOLDER_SC).replace("\\","\\\\");
+      DEVOPS_LOCAL_FOLDER_DF = (env.DEVOPS_LOCAL_FOLDER_DF).replace("\\","\\\\");
+      DEVOPS_LOCAL_FOLDER_RFT = (env.DEVOPS_LOCAL_FOLDER_RFT).replace("\\","\\\\");
+      ZDT_COBOL_PDS = env.ZDT_COBOL_PDS;
+      ZDT_JCL_PDS = env.ZDT_JCL_PDS;
+      ZDT_COPYBOOK_PDS = env.ZDT_COPYBOOK_PDS;
+      ZDT_DCLGEN_PDS = env.ZDT_DCLGEN_PDS;
+      ZDT_PROC_PDS = env.ZDT_PROC_PDS;
+      ZDT_BMS_PDS = env.ZDT_BMS_PDS;
+      ZDT_LOAD_PDS = env.ZDT_LOAD_PDS;
+      HOST = "10.215.49.104";
+}
+// SOURCE_CODE FUNCTIONS
+def ProcessSourceCode(){           
+      InvokeEnvVars()
+      
+      //SC Array
+      MODIFIED_FILE_ARRAY = []
+      DELETED_FILE_ARRAY = []
+      ADDED_FILE_ARRAY = []
+      FTP_FILE_ARRAY_SC = []
+      
+def PullSourceCode = {
+      sh """ 
+            cd ${GIT_WORKING_REPO_SC}
+            git pull origin master > git.log
+      """
+}
+def FilterFTPFilesForSC = {
+      def file = new File(GIT_WORKING_REPO_SC+"/git.log")
+    def gitLogLines = file.readLines()
+      
+      //Filtering Files to be Transferred...
+    for (i=0;i<gitLogLines.size();i++){
+        
+        if(gitLogLines[i].contains("create mode")){
+            //echo "Files is added: "+gitLogLines[i].split(' ')[4]
+            ADDED_FILE_ARRAY.add(gitLogLines[i].split(' ')[4])
+            
+        } else if(gitLogLines[i].contains("delete mode")){
+            //echo "File is deleted: "+gitLogLines[i].split(' ')[4]
+            DELETED_FILE_ARRAY.add(gitLogLines[i].split(' ')[4])
+            
+        } else if(gitLogLines[i].contains("|")){
+            //echo "File is modified: "+gitLogLines[i].split(' ')[1]
+            MODIFIED_FILE_ARRAY.add(gitLogLines[i].split(' ')[1])
+            
+        }
+    }
+      
+    //Collecting Files for FTP Transfer
+    mfileloop:
+    for(mfile in MODIFIED_FILE_ARRAY){
+        for(dfile in DELETED_FILE_ARRAY){
+            if (mfile.equals(dfile)){
+                continue mfileloop;  
+            }else{
+                //echo "adding: "+mfile
+                FTP_FILE_ARRAY_SC.add(mfile)
+            }
+        }    
+    }
+      
+    echo "Final FTP Array: "+FTP_FILE_ARRAY_SC
+      file.delete()
+}
+def WriteSourceCodePutFTP = {
+      sh """
+cat > ftp-sc-pull << EOF
+pdc0003
+master1
+binary
+lcd ${GIT_LOCAL_REPO_SC}
+EOF
+      """
+      for (i=0; i<FTP_FILE_ARRAY_SC.size(); i++ ){
+            echo  "Adding "+ FTP_FILE_ARRAY_SC[i] +" to list..."
+            sh """      echo 'cd $ZDT_COBOL_PDS_SC' >> ftp-sc-pull;"""
+            sh "  echo put \\'${FTP_FILE_ARRAY_SC[i]}\\' ${FTP_FILE_ARRAY_SC[i]} >> ftp-sc-pull"
+      }
+      sh """      echo 'bye' >> ftp-sc-pull"""
+}
+      PullSourceCode()
+      FilterFTPFilesForSC()
+      WriteSourceCodePutFTP()
+      sh"""FTP -s:ftp-sc-pull $HOST"""
+
+}
+// DATA_FILE FUNCTIONS
+def ProcessDataFile(){
+      InvokeEnvVars()
+      
+      //DF Array
+      MODIFIED_FILE_ARRAY = []
+      DELETED_FILE_ARRAY = []
+      ADDED_FILE_ARRAY = []
+      FTP_FILE_ARRAY_DF = []
+      
+def PullDataFile = {
+      sh """ 
+            cd ${GIT_WORKING_REPO_DF}
+            git pull origin master > git.log
+      """      
+} 
+//sh "echo get \\'DEVOPS.METADATA.A"+String.format('%03d',i+1)+"\\' ${DATA_FILE_ARRAY[i]}.MTD >> ftpRecievedata"
+
+def FilterFTPFilesForDF = {
+      def file = new File(GIT_WORKING_REPO_DF+"/git.log")
+    def gitLogLines = file.readLines()
+      
+      //Filtering Files to be Transferred...
+    for (i=0;i<gitLogLines.size();i++){
+        
+        if(gitLogLines[i].contains("create mode")){
+            //echo "Files is added: "+gitLogLines[i].split(' ')[4]
+            ADDED_FILE_ARRAY.add(gitLogLines[i].split(' ')[4])
+            
+        } else if(gitLogLines[i].contains("delete mode")){
+            //echo "File is deleted: "+gitLogLines[i].split(' ')[4]
+            DELETED_FILE_ARRAY.add(gitLogLines[i].split(' ')[4])
+            
+        } else if(gitLogLines[i].contains("|")){
+            //echo "File is modified: "+gitLogLines[i].split(' ')[1]
+            MODIFIED_FILE_ARRAY.add(gitLogLines[i].split(' ')[1])
+            
+        }
+    }
+      
+    //Collecting Files for FTP Transfer
+    mfileloop:
+    for(mfile in MODIFIED_FILE_ARRAY){
+        for(dfile in DELETED_FILE_ARRAY){
+            if (mfile.equals(dfile)){
+                continue mfileloop;  
+            }else{
+                //echo "adding: "+mfile
+                FTP_FILE_ARRAY_DF.add(mfile)
+            }
+        }    
+    }
+      
+    echo "Final FTP Array: "+FTP_FILE_ARRAY_DF
+      file.delete()
+}
+
+def WriteDataPutFTP = {
+      sh """
+cat > ftp-pull-data << EOF
+pdc0003
+master1
+binary
+lcd ${GIT_LOCAL_REPO_DF}
+EOF
+      """
+      for (i=0; i<FTP_FILE_ARRAY_DF.size(); i++ ){
+            echo  "Adding "+ FTP_FILE_ARRAY_DF[i] +" to list..."
+            sh """      echo 'cd $ZDT_COBOL_PDS' >> ftp-pull-data;"""
+            sh "  echo put \\'${FTP_FILE_ARRAY_DF[i]}\\' ${FTP_FILE_ARRAY_DF[i]} >> ftp-pull-data"
+      } 
+      sh """      echo 'bye' >> ftp-pull-data """ 
+}
+      //push data to the github repo
+      PullDataFile()
+      FilterFTPFilesForDF()
+      WriteDataPutFTP()
+      sh""" FTP -s:ftp-pull-data $HOST"""
+}
+// RFT_FILE FUNCTIONS
+def ProcessRFTScript(){
+      InvokeEnvVars()
+
+      //RFT Array
+      MODIFIED_FILE_ARRAY = []
+      DELETED_FILE_ARRAY = []
+      ADDED_FILE_ARRAY = []
+      FTP_FILE_ARRAY_RFT = []
+      
+//push files to the repo
+def PullRFTFile = {
+            sh """ 
+                  cd ${GIT_WORKING_REPO_RFT}
+                  git pull origin master > git.log
+            """      
+}
+
+def FilterFTPFilesForRFT = {
+      def file = new File(GIT_WORKING_REPO_RFT+"/git.log")
+    def gitLogLines = file.readLines()
+      
+      //Filtering Files to be Transferred...
+    for (i=0;i<gitLogLines.size();i++){
+        
+        if(gitLogLines[i].contains("create mode")){
+            //echo "Files is added: "+gitLogLines[i].split(' ')[4]
+            ADDED_FILE_ARRAY.add(gitLogLines[i].split(' ')[4])
+            
+        } else if(gitLogLines[i].contains("delete mode")){
+            //echo "File is deleted: "+gitLogLines[i].split(' ')[4]
+            DELETED_FILE_ARRAY.add(gitLogLines[i].split(' ')[4])
+            
+        } else if(gitLogLines[i].contains("|")){
+            //echo "File is modified: "+gitLogLines[i].split(' ')[1]
+            MODIFIED_FILE_ARRAY.add(gitLogLines[i].split(' ')[1])
+            
+        }
+    }
+      
+    //Collecting Files for FTP Transfer
+    mfileloop:
+    for(mfile in MODIFIED_FILE_ARRAY){
+        for(dfile in DELETED_FILE_ARRAY){
+            if (mfile.equals(dfile)){
+                continue mfileloop;  
+            }else{
+                //echo "adding: "+mfile
+                FTP_FILE_ARRAY_RFT.add(mfile)
+            }
+        }    
+    }
+      
+    echo "Final FTP Array: "+FTP_FILE_ARRAY_RFT
+      file.delete()
+}
+
+def WriteRFTPutFTP = {
+	sh """
+cat > ftp-pull-rft << EOF
+pdc0003
+master1
+binary
+lcd ${GIT_LOCAL_REPO_RFT}
+EOF
+      """
+      for (i=0; i<FTP_FILE_ARRAY_RFT.size(); i++ ){
+            echo  "Adding "+ FTP_FILE_ARRAY_RFT[i] +" to list..."
+            sh """      echo 'cd $ZDT_COBOL_PDS' >> ftp-pull-rft;"""
+            sh "  echo put \\'${FTP_FILE_ARRAY_RFT[i]}\\' ${FTP_FILE_ARRAY_RFT[i]} >> ftp-pull-rft"
+      } 
+      sh """      echo 'bye' >> ftp-pull-rft """ 
+}
+      //push data to the github repo
+      PullRFTFile()
+      FilterFTPFilesForRFT()
+      WriteRFTPutFTP()
+      sh""" FTP -s:ftp-pull-rft $HOST"""
+}
+// PROCESS STARTS
+node{
+      deleteDir()
+      stage "Pulling Source Codes"
+            InvokeEnvVars()
+            echo "Processing Source Code"
+            ProcessSourceCode()
+      stage "Pulling Data Files"
+            InvokeEnvVars()
+            echo "Processing Data File"
+            ProcessDataFile()
+      stage "Pulling RFT Scripts"
+            InvokeEnvVars()
+            echo "Processing RFT Script"
+            ProcessRFTScript()
+}
